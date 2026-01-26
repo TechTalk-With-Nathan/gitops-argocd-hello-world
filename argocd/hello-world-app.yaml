@@ -6,8 +6,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/nathalawi/gitops-argocd-hello-world.git
-    targetRevision: main
+    repoURL: https://github.com/TechTalk-With-Nathan/gitops-argocd-hello-world.git
+    targetRevision: gitops-cilium-gatwayAPI-cert-manager
     path: apps/hello-world
     kustomize: {} 
   destination:

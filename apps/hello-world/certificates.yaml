@@ -1,0 +1,14 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-example-local
+  namespace: default
+spec:
+  secretName: wildcard-example-local-tls
+  commonName: "*.example.com"
+  dnsNames:
+    - "*.example.com"
+  issuerRef:
+    name: example-local-ca
+    kind: ClusterIssuer

@@ -3,22 +3,26 @@
 
 # GitOps Live Demo – Kubernetes with Argo CD
 
-This repository contains the **live demo** used in the **TechTalk With Nathan** GitOps video.
-It demonstrates how to deploy and manage applications on Kubernetes using **GitOps principles**, with **Git as the single source of truth** and **Argo CD** as the GitOps controller.
+This repository contains the **live demos** used in the **TechTalk With Nathan** YouTube series.
+
+It demonstrates how to deploy and manage Kubernetes applications using **GitOps principles**, with **Git as the single source of truth** and **Argo CD** as the GitOps controller.
+
+All changes to the cluster are driven **only through Git**.
 
 ---
 
 ## 📌 What This Demo Shows
 
-* What GitOps is in practice
-* How Git becomes the **only interface** for deploying to Kubernetes
-* How Argo CD continuously reconciles the cluster state with Git
-* How changes in Git automatically update Kubernetes
-* How GitOps enables auditability, rollback, and consistency
+- GitOps in practice on Kubernetes
+- Git as the **only interface** for deployments
+- Continuous reconciliation with Argo CD
+- Automatic updates when Git changes
+- Safe rollbacks and full auditability
+- A clean foundation for advanced GitOps demos
 
-The key takeaway:
+**Key takeaway:**
 
-> **Change Git → Kubernetes updates automatically**
+> **Change Git → Argo CD reconciles → Kubernetes updates automatically**
 
 ---
 
@@ -80,7 +84,7 @@ This demo was recorded using **Minikube**, but works the same on any cluster.
 ### 1️⃣ Start Kubernetes (example with Minikube)
 
 ```bash
-minikube start
+minikube start --driver=docker --cni=false
 ```
 
 Verify access:
@@ -102,12 +106,12 @@ kubectl apply -n argocd \
 Wait until all pods are running:
 
 ```bash
-kubectl get pods -n argocd
+kubectl get pods -n argocd -w
 ```
 
 ---
 
-### 3️⃣ Access the Argo CD UI (local demo)
+### 3️⃣ Access the Argo CD UI (local demo) (optional)
 
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
@@ -129,107 +133,103 @@ kubectl get secret argocd-initial-admin-secret \
 
 ---
 
-### 4️⃣ Create an Argo CD Application
-
-In the Argo CD UI:
-
-* Repository URL: this Git repository
-* Path: `apps/hello-world`
-* Destination cluster: `https://kubernetes.default.svc`
-* Namespace: `default`
-* Sync policy: **Manual or Automatic**
-
-This tells Argo CD **what to watch** and **where to deploy it**.
-
----
-
-## The GitOps Moment (Core Demo)
-
-1. Open `deployment.yaml`
-2. Change the number of replicas:
-
-```yaml
-replicas: 3
+### 4️⃣ Bootstrap Argo CD (App of Apps Pattern)
+This repository uses the App of Apps pattern so Argo CD manages all applications declaratively.
+```bash
+kubectl apply -f app-of-apps.yaml
 ```
 
-3. Commit and push the change:
+## 🔐 TLS Setup (Local CA for HTTPS Demos)
+
+### 1️⃣ Wait for cert-manager : (cert-manager is installed via GitOps)
 
 ```bash
-git commit -am "Scale hello-world to 3 replicas"
-git push
+kubectl -n cert-manager wait \
+  --for=condition=available \
+  --timeout=600s deployment/cert-manager || true
 ```
-
-4. Watch Kubernetes update automatically:
+### 2️⃣ Generate Local CA Certificate
 
 ```bash
-kubectl get pods
+mkdir -p .certs
+openssl genrsa -out .certs/ca.key 4096
+openssl req -x509 -new -nodes \
+  -key .certs/ca.key \
+  -sha256 -days 365 \
+  -out .certs/ca.crt \
+  -subj "/CN=example-local-ca"
+
 ```
 
-You should see new Pods created **without running any kubectl commands**.
-
-This is GitOps in action.
-
----
-
-## Rollback Example
-
-To rollback, simply revert the Git change:
+### 3️⃣ Create CA Secret for cert-manager
 
 ```bash
-git revert HEAD
-git push
+kubectl -n cert-manager create secret tls example-local-ca \
+  --cert=.certs/ca.crt \
+  --key=.certs/ca.key
 ```
 
-Argo CD will automatically reconcile the cluster back to the previous state.
+## 🌐 Gateway API & Networking (Minikube)
 
----
+### 1️⃣ Verify Cilium GatewayClass Status
 
-## Why This Is More Secure
+```bash
+kubectl get gatewayclass cilium-gatewayclass \
+  -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}{"\n"}'
+```
+Expected output:
 
-* Humans do not need direct access to the cluster
-* All changes go through Git (PRs, reviews, history)
-* Clear audit trail of **who changed what and when**
-* Reduced risk of configuration drift
+```graphql
+True
+```
+### 2️⃣ Restart Cilium Operator (if not Accepted)
 
----
+```bash
+kubectl -n kube-system rollout restart deploy/cilium-operator
+```
+### 3️⃣ Expose Gateway IP on Minikube
 
-## 📈 When GitOps Makes Sense
+Minikube does not provide LoadBalancer IPs by default. Run the tunnel:
 
-GitOps works best when:
+```bash
+minikube tunnel
+```
+Keep this running in a separate terminal.
 
-* You use Kubernetes
-* You have multiple environments
-* You work in teams
-* You care about auditability and consistency
+### 4️⃣ Verify Gateway Address In another terminal:
 
-It may be overkill for small experiments, but it shines at scale.
+```bash
+kubectl get gateway -n default
+```
+You should see:
 
----
+* `Programmed=True`
+* An external IP address
 
-## Related Content
+```bash
+<GATEWAY-IP> hello-world.example.com
+```
 
-This repository accompanies the **GitOps demo video** on the **TechTalk With Nathan** YouTube channel.
+### 5️⃣ Map Gateway IP Locally
+In your `/etc/hosts` file add a line 
 
-Upcoming topics:
+```bash
+<GATEWAY-IP> hello-world.example.com
+```
 
-* GitOps + Ingress
-* GitOps with HTTPS and cert-manager
-* GitOps for multi-environment setups
+## ✅ Verification
+Open in your browser type the link `https://hello-world.example.com`
+You should see:
 
----
+* HTTPS enabled
+* Valid certificate (local CA)
+* Application reachable through GitOps-managed resources
 
 ## Cleanup
 
-To remove the demo:
-
 ```bash
-kubectl delete namespace argocd
-kubectl delete deployment hello-world
-kubectl delete service hello-world
+minikube delete
 ```
-
----
-
 ## 📄 License
 
 This demo is provided for **educational purposes**.

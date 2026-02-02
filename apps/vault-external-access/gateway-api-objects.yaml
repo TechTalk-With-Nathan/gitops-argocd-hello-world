@@ -1,0 +1,56 @@
+# Gateway with HTTP redirection
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: vault-gateway
+spec:
+  gatewayClassName: cilium
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: vault-tls
+
+---
+# HTTPRoute for redirecting HTTP to HTTPS
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: vault-redirect
+spec:
+  parentRefs:
+  - name: vault-gateway
+    sectionName: http
+  hostnames:
+  - vault.example.com
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301
+
+---
+# HTTPRoute for handling HTTPS traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-route
+  labels:
+    gateway: vault-gateway
+spec:
+  parentRefs:
+  - name: vault-gateway
+    sectionName: https
+  hostnames:
+  - vault.example.com
+  rules:
+  - backendRefs:
+    - name: vault-ui
+      port: 8200

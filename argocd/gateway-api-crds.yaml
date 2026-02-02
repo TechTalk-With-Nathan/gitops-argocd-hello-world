@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/TechTalk-With-Nathan/gitops-argocd-hello-world.git
-    targetRevision: gitops-cilium-gatwayAPI-cert-manager
+    targetRevision: vault-manual-unseal
     path: apps/gateway-api-crds
     kustomize: {} 
   destination:
